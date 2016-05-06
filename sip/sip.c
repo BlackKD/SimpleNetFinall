@@ -82,7 +82,7 @@ void* routeupdate_daemon(void* arg) {
 		//memcpy(pkuppt->entry[i],dv[0].dvEntry[i],sizeof(dv_entry_t));
 	}
 		memcpy(pkt->data,pkuppt,sizeof(pkt_routeupdate_t));
-    pthread_mutex_unlock(dv_mutex);
+        pthread_mutex_unlock(dv_mutex);
         sleep(ROUTEUPDATE_INTERVAL);
         son_sendpkt(BROADCAST_NODEID, pkt, son_conn);
     }
@@ -109,6 +109,28 @@ void updatatable(sip_pkt_t *pkt)
 			}
 		}
 	}
+ 
+    //int  i = 0;
+    for(i = 0 ; i < topology_getNodeNum();i++)
+    {
+        if(dv[0].dvEntry[i].nodeID == dv[0].nodeID) continue;
+        int destnode = dv[0].dvEntry[i].nodeID;
+        int j = 0;
+        for(j = 0;j <topology_getNbrNum()+1;j++)
+        {
+            if(dv[j].nodeID!=dv[0].nodeID&&dv[j].nodeID!=destnode)
+            {
+                if(dvtable_getcost(dv,dv[0].nodeID,dv[j].nodeID)+dvtable_getcost(dv,dv[j].nodeID,destnode) < dv[0].dvEntry[i].cost)
+                {
+                    //dv[0].dvEntry[i].cost = topology_getCost(dv[0].nodeID,dv[j].nodeID)+dv[j].dvEntry[i].cost;
+                    dvtable_setcost(dv,dv[0].nodeID,destnode,dvtable_getcost(dv,dv[0].nodeID,dv[j].nodeID)+dvtable_getcost(dv,dv[j].nodeID,destnode));
+                    pthread_mutex_lock(routingtable_mutex);
+                    routingtable_setnextnode(routingtable,destnode,dv[j].nodeID);
+                    pthread_mutex_unlock(routingtable_mutex);
+                }
+            }
+        }
+    }
 	//需要在此处刷新向量和路由
 	pthread_mutex_unlock(dv_mutex);
 }
@@ -122,7 +144,7 @@ void* pkthandler(void* arg) {
 		switch(pkt->header.type)
 		{
 			case ROUTE_UPDATE:updatatable(pkt);break;
-			case SIP:break;//heiheihei
+			case SIP:break;//heiheihei 注意对SIP报转发时要从路由表中查下一跳IP，并且对获得目的地不是自己的包要进行转发（同上）
 		}
 	}
   return 0;
