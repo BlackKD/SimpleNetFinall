@@ -34,7 +34,16 @@ int sip_conn;
 // 服务器只有一个seghandler.
 void stcp_server_init(int conn) 
 {
-	return;
+	    int i = 0;
+    for(i = 0; i < 10 ; i++)
+    {
+        TCBtable[i]=NULL;
+    }
+    int connection = conn;//针对重叠网络TCP套接字描述符conn初始化一个STCP层的全局变量,
+    pthread_t id;
+    pthread_create(&id,NULL,&seghandler,(void *)&connection);
+    printf("stcp_server_init finish!\n");
+    return;
 }
 
 // 这个函数查找服务器TCB表以找到第一个NULL条目, 然后使用malloc()为该条目创建一个新的TCB条目.
@@ -73,6 +82,194 @@ int stcp_server_close(int sockfd)
 // 请查看服务端FSM以了解更多细节.
 void* seghandler(void* arg) 
 {
-	return;
+    while(1)
+    {
+        seg_t * mytcpMessage = (seg_t*)malloc(sizeof(seg_t));
+        memset(mytcpMessage,0,sizeof(seg_t));
+        int j = sip_recvseg(connfd, mytcpMessage);
+
+        if(j == 0)
+        {
+            switch (mytcpMessage->header.type) {
+                case SYN:
+                {
+                    printf("receive SYN \n");
+                    int dest_port = mytcpMessage->header.dest_port;
+                    printf("dest port %d\n",dest_port);
+                    int i = 0;
+                   /* for(i = 0; i < 10 ;i++)
+                    {
+                        if(TCBtable[i]!= NULL)
+                        printf("%d\n",TCBtable[i]->server_portNum);
+                    }
+                   */
+                    for(i = 0 ; i < MAX_TRANSPORT_CONNECTIONS ; i++)
+                    {
+                        if(TCBtable[i]!=NULL)
+                        {
+                            if(TCBtable[i]->server_portNum == dest_port)
+                            {
+                                pthread_mutex_lock(TCBtable[i]->bufMutex);
+				printf("received a SYN package\n");
+                                
+                                TCBtable[i]->client_portNum = mytcpMessage->header.src_port;
+                                
+                                TCBtable[i]->state = CONNECTED;
+                                //TCBtable[i]->expect_seqNum = mytcpMessage->header.seq_num + 1;
+                                TCBtable[i]->recvBuf = mytcpMessage -> data;
+                                TCBtable[i]->usedBufLen = TCBtable[i]->usedBufLen +mytcpMessage ->header.length;
+                                
+                                
+                                seg_t * retcpMessage = (seg_t*)malloc(sizeof(seg_t));
+                                memset(retcpMessage,0,sizeof(seg_t));
+                                retcpMessage->header.src_port = TCBtable[i]->server_portNum;
+                                retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
+                                retcpMessage->header.ack_num = mytcpMessage->header.seq_num+1;
+                                retcpMessage->header.type = SYNACK;
+                                sip_sendseg(connfd, retcpMessage);
+                       //         while(1)
+                         //       {
+                           //     sip_sendseg(*(int *)arg, retcpMessage);
+                             //   }
+                                pthread_mutex_unlock(TCBtable[i]->bufMutex);
+				break;
+                            }
+                        }
+                    }
+                    if(i == 10)
+                    {
+                        printf("SYN error!\n");
+                    }
+                }
+                    break;
+                case FIN:
+                {
+                    printf("receive FIN \n");
+                    int dest_port = mytcpMessage->header.dest_port;
+                    int i = 0;
+
+                    for(i = 0 ; i < MAX_TRANSPORT_CONNECTIONS ; i++)
+                    {
+                        if(TCBtable[i]!=NULL)
+                        {
+                            if(TCBtable[i]->server_portNum == dest_port)
+                            {
+                                printf("i: %d\n",i);
+                                pthread_mutex_lock(TCBtable[i]->bufMutex);
+                                seg_t * retcpMessage = (seg_t*)malloc(sizeof(seg_t));
+                                memset(retcpMessage,0,sizeof(seg_t));
+                                retcpMessage->header.src_port = TCBtable[i]->server_portNum;
+                                retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
+                                retcpMessage->header.ack_num = mytcpMessage->header.seq_num+1;
+                                retcpMessage->header.type = FINACK;
+                                sip_sendseg(connfd, retcpMessage);
+                               // sip_sendseg(*(int *)arg, retcpMessage);
+                                printf("send ackfin %d",i);
+                             //   while(1)
+                               // {
+                                //    sip_sendseg(*(int *)arg, retcpMessage);
+                               // }
+                                TCBtable[i]->state = CLOSEWAIT;
+								//TCBtable[i]->usedBufLen = 0;
+                                pthread_mutex_unlock(TCBtable[i]->bufMutex);
+								break;
+                            }
+                        }
+                    }
+                    if(i == 10)
+                    {
+                        printf("FIN error or Link has been closed!\n");
+                    }
+                }break;
+                case DATA:
+                {
+					  printf("receive DATA \n");
+                    int dest_port = mytcpMessage->header.dest_port;
+                    printf("dest port %d\n",dest_port);
+                    int i = 0;
+					for(i = 0;i < MAX_TRANSPORT_CONNECTIONS;i ++)
+					{
+						if(TCBtable[i]!=NULL)
+						{
+							if(TCBtable[i]->server_portNum == dest_port)
+							{
+								printf("i: %d\n",i);
+								if(mytcpMessage->header.seq_num == TCBtable[i]->expect_seqNum)
+								{
+									pthread_mutex_lock(TCBtable[i]->bufMutex);
+									if(TCBtable[i]->usedBufLen + mytcpMessage->header.length >= RECEIVE_BUF_SIZE)
+									{
+										printf("TCB buffer overflow! throw away! %d\n",TCBtable[i]->usedBufLen);
+										//TCBtable[i]->expect_seqNum = mytcpMessage->header.seq_num + mytcpMessage->header.length;
+										seg_t * retcpMessage = (seg_t*)malloc(sizeof(seg_t));
+										memset(retcpMessage,0,sizeof(seg_t));
+										retcpMessage->header.src_port = TCBtable[i]->server_portNum;
+										retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
+										retcpMessage->header.ack_num = TCBtable[i]->expect_seqNum;
+										retcpMessage->header.type = DATAACK;
+										sip_sendseg(connfd, retcpMessage);
+										printf("send next Dataack %d %d %d",i,TCBtable[i]->expect_seqNum,TCBtable[i]->usedBufLen);
+									}
+									else
+									{
+										printf("TCB buffer OK! add more! %d\n",TCBtable[i]->usedBufLen);
+										//TCBtable[i]->expect_seqNum =  mytcpMessage->header.seq_num +1;
+										TCBtable[i]->expect_seqNum = mytcpMessage->header.seq_num + mytcpMessage->header.length;
+										memcpy(TCBtable[i]->recvBuf + TCBtable[i]->usedBufLen , mytcpMessage->data , mytcpMessage->header.length);
+										TCBtable[i]->usedBufLen = TCBtable[i]->usedBufLen + mytcpMessage->header.length;
+										seg_t * retcpMessage = (seg_t*)malloc(sizeof(seg_t));
+										memset(retcpMessage,0,sizeof(seg_t));
+										retcpMessage->header.src_port = TCBtable[i]->server_portNum;
+										retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
+										retcpMessage->header.ack_num = TCBtable[i]->expect_seqNum;
+										retcpMessage->header.type = DATAACK;
+										sip_sendseg(connfd, retcpMessage);
+										printf("send next Dataack %d %d %d",i,TCBtable[i]->expect_seqNum,TCBtable[i]->usedBufLen);
+									}
+									pthread_mutex_unlock(TCBtable[i]->bufMutex);
+								}
+								else
+								{
+								printf("Server need old packet!n\n");
+								seg_t * retcpMessage = (seg_t*)malloc(sizeof(seg_t));
+                                memset(retcpMessage,0,sizeof(seg_t));
+                                retcpMessage->header.src_port = TCBtable[i]->server_portNum;
+                                retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
+                                retcpMessage->header.ack_num = TCBtable[i]->expect_seqNum;
+                                retcpMessage->header.type = DATAACK;
+                                sip_sendseg(connfd, retcpMessage);
+                               // sip_sendseg(*(int *)arg, retcpMessage);
+                                printf("send old Dataack %d need old packet%d\n",i,TCBtable[i]->expect_seqNum);
+								}
+								break;
+							}
+						}
+					}
+					if(i == 10)
+					{
+						 printf("DATA error !\n");
+					}
+                    
+                }break;
+                default:
+                    break;
+            }
+        }
+        else
+        {
+          //  if(j == 1)
+          //  {
+          //      seg_t * retcpMessage = (seg_t*)malloc(sizeof(seg_t));
+          //      memset(retcpMessage,0,sizeof(seg_t));
+          //      retcpMessage->header.src_port = TCBtable[i]->server_portNum;
+          //      retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
+          //      retcpMessage->header.seq_num = TCBtable[i]->expect_seqNum;
+          //      retcpMessage->header.type = DATAACK;
+          //      sip_sendseg(*(int *)arg, retcpMessage);
+          //  }
+        }
+        
+    }
+  return 0;
 }
 

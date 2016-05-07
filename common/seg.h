@@ -1,6 +1,10 @@
 //
 // 文件名: seg.h
-
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <time.h>
+#include <pthread.h>
 // 描述: 这个文件包含STCP段定义, 以及用于发送和接收STCP段的接口sip_sendseg() and sip_rcvseg(), 及其支持函数的原型. 
 //
 // 创建日期: 2015年

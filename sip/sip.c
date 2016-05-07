@@ -46,15 +46,33 @@ pthread_mutex_t* routingtable_mutex;	//路由表互斥量
 //实现SIP的函数
 /**************************************************************/
 
-//SIP进程使用这个函数连接到本地SON进程的端口SON_PORT.
-//成功时返回连接描述符, 否则返回-1.
-int connectToSON() { 
-	//你需要编写这里的代码.
-  return 0;
+//SIP进程使用这个函数连接到本地SON进程的端口SON_PORT
+//成功时返回连接描述符, 否则返回-1
+int connectToSON() {
+
+    struct sockaddr_in servaddr;
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0); //AF_INET for ipv4; SOCK_STREAM for byte stream
+    if(sockfd < 0) {
+        printf("Socket error!\n");
+        return 0;
+    }
+    memset(&servaddr, 0, sizeof(struct sockaddr_in));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = (unsigned long)(((unsigned long)topology_getMyNodeID())<<24)+ init_ip;
+    servaddr.sin_port = htons(SON_PORT);
+    //connect to the server
+    if(connect(sockfd, (struct sockaddr* )&servaddr, sizeof(servaddr)) < 0) {//创建套接字连接服务器
+        printf("IP %d Link Wrong!\n",topology_getMyNodeID());
+        //exit(1);
+        return -1;
+    }
+    else
+    {
+        printf("IP %d Link Success!\n",topology_getMyNodeID());
+        return sockfd;
+        
+    }
 }
-
-
-
 
 //这个线程每隔ROUTEUPDATE_INTERVAL时间发送路由更新报文.路由更新报文包含这个节点
 //的距离矢量.广播是通过设置SIP报文头中的dest_nodeID为BROADCAST_NODEID,并通过son_sendpkt()发送报文来完成的.
@@ -154,15 +172,7 @@ void* pkthandler(void* arg) {
 //这个函数终止SIP进程, 当SIP进程收到信号SIGINT时会调用这个函数. 
 //它关闭所有连接, 释放所有动态分配的内存.
 void sip_stop() {
-	//你需要编写这里的代码.
-  return;
-}
-
-//这个函数打开端口SIP_PORT并等待来自本地STCP进程的TCP连接.
-//在连接建立后, 这个函数从STCP进程处持续接收包含段及其目的节点ID的sendseg_arg_t. 
-//接收的段被封装进数据报(一个段在一个数据报中), 然后使用son_sendpkt发送该报文到下一跳. 下一跳节点ID提取自路由表.
-//当本地STCP进程断开连接时, 这个函数等待下一个STCP进程的连接.
-void waitSTCP() {
+    close(son_conn);
 	//你需要编写这里的代码.
   return;
 }
