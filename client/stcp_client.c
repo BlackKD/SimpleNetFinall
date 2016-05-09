@@ -4,17 +4,25 @@
 //
 //创建日期: 2015年
 
-#include <stdlib.h>
+#include <sys/types.h>	/* basic system data types */
+#include <sys/socket.h>	/* basic socket definitions */
+#include <netinet/in.h>	/* sockaddr_in{} and other Internet defns */
+#include <arpa/inet.h>	/* inet(3) functions */
+#include <errno.h>
+#include <fcntl.h>		/* for nonblocking */
+#include <netdb.h>
+#include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <assert.h>
-#include <strings.h>
+#include <sys/stat.h>	/* for S_xxx file mode constants */
+#include <sys/uio.h>		/* for iovec{} and readv/writev */
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/un.h>	
+#include <pthread.h>
 #include <sys/time.h>
 #include <time.h>
-#include <pthread.h>
 #include "../topology/topology.h"
 #include "stcp_client.h"
 
@@ -30,6 +38,8 @@ client_tcb_t *create_ctcb(unsigned client_port) {
 		p->state = CLOSED;
 		p->next_seqNum = 0;
 		p->unAck_segNum = 0;
+
+		//p->client_nodeID = topology_getMyNodeID();
 
 		p->sendBufunAckHead  = NULL;
 		p->sendBufunAckTail  = NULL;
@@ -85,11 +95,7 @@ int sendseg(int conn, client_tcb_t *p, seg_t *segPtr) {
 	}
 
 	// send the segment
-	if( segPtr->header.seq_num == 13 )
-   {
-	   //while(1);
-   }
-	if( !sip_sendseg(conn, segPtr) )
+	if( !sip_sendseg(conn, p->server_nodeID, segPtr) )
 		return 0;
 	
 	int seg_type = segPtr->header.type;
@@ -242,6 +248,8 @@ void handle_finack(seg_t *p) {
 	pthread_mutex_unlock(&(tcb_mutex[sock]));
 }
 
+int sendData(client_tcb_t *tcb, segBuf_t *sb);
+
 int sendUnsent(client_tcb_t *tcb) {
 	printf("send the unsent segs, if any\n");
 	if(tcb == NULL) return 0;
@@ -344,8 +352,6 @@ int sendData(client_tcb_t *tcb, segBuf_t *sb) {
 	}
 	else { // add it to the "unsent" buffer
 		printf("notAcked buffer is full and add the segBuf to unsent buffer\n");
-		segBuf_t *unsentHead = tcb->sendBufunSentHead;
-		segBuf_t *unsentTail = tcb->sendBufunSentTail;
 
 		if(tcb->sendBufunSentHead == NULL) // empty
 			tcb->sendBufunSentHead = sb;
@@ -514,7 +520,7 @@ int stcp_client_sock(unsigned int client_port) {
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //
 
-int stcp_client_connect(int sockfd, unsigned int server_port) {
+int stcp_client_connect(int sockfd, int nodeID, unsigned int server_port) {
 	printf("stcp_client_connect\n");
 
 	client_tcb_t *p = ctcb_table[sockfd];
@@ -526,11 +532,19 @@ int stcp_client_connect(int sockfd, unsigned int server_port) {
 	}
 	
 	p->server_portNum = server_port;
+	p->server_nodeID  = nodeID; 
 	seq_num = p->next_seqNum;
 
 	memset(&seg, 0, sizeof(seg_t));
-	set_stcp_hdr( &(seg.header), p->client_portNum, server_port, seq_num, 0, 0, SYN, 0, 0 );
-
+	// set header
+	stcp_hdr_t *h = &(seg.header);
+	h->src_port  = p->client_portNum;
+	h->dest_port = server_port;
+	h->seq_num   = seq_num;
+	h->ack_num   = 0;
+	h->length 	 = 0;
+	h->type      = SYN;
+	
 	// send SYN 
 	if( !sendseg(connfd, p, &seg) )
 		return -1;
@@ -573,7 +587,7 @@ int stcp_client_send(int sockfd, void* data, unsigned int length)
 		int cur_send_len = (rest_len >= MAX_SEG_LEN - 1) ? MAX_SEG_LEN - 1 : rest_len;
 		printf("rest length: %d\n", rest_len);
 		unsigned seq_num = p->next_seqNum;
-		p->next_seqNum += cur_send_len;
+		p->next_seqNum  += cur_send_len;
 
 		printf("Send Data seq_num: %d\n", seq_num);
 		// copy data
@@ -583,17 +597,19 @@ int stcp_client_send(int sockfd, void* data, unsigned int length)
 		}
 		rest_len -= cur_send_len;
 		// set header
-		set_stcp_hdr( &(seg->header), p->client_portNum, p->server_portNum, seq_num, 
-				0, cur_send_len, DATA, 0, 0 );
+		stcp_hdr_t *h = &(seg->header);
+		h->src_port  = p->client_portNum;
+		h->dest_port = p->server_portNum;
+		h->seq_num   = seq_num;
+		h->ack_num   = 0;
+		h->length 	 = cur_send_len;
+		h->type      = DATA;
 
 		// unsentBuffer will handle it
-		printf("client_send 582 lock\n");
 		pthread_mutex_lock(p->bufMutex);
-		printf("client_send 584 after locked\n");
-		int ret = sendData(p, sb);
-		printf("client_send 586 unlock \n");
+		int ret = sendData(p, sb);	
 		pthread_mutex_unlock(p->bufMutex);
-		printf("client_send 588 unlock \n");
+
 
 		if(!ret) return -1;
 	}
@@ -622,7 +638,14 @@ int stcp_client_disconnect(int sockfd) {
 
 	seq_num = p->next_seqNum ++;
 	memset(&seg, 0, sizeof(seg_t));
-	set_stcp_hdr(&(seg.header), p->client_portNum, p->server_portNum, seq_num, 0, 0, FIN, 0, 0);
+	// set header
+	stcp_hdr_t *h = &(seg.header);
+	h->src_port  = p->client_portNum;
+	h->dest_port = p->server_portNum;
+	h->seq_num   = seq_num;
+	h->ack_num   = 0;
+	h->length 	 = 0;
+	h->type      = FIN;
 
 	// send FIN
 	if( !sendseg(connfd, p, &seg) )
@@ -672,7 +695,8 @@ void *seghandler(void* arg) {
 	seg_t *seg_p = (seg_t *)malloc(sizeof(seg_t));
 	while(1) {
 		memset(seg_p, 0, sizeof(seg_t));
-		lost = sip_recvseg(connfd, seg_p);
+		int src_nodeID = 0;
+		lost = sip_recvseg(connfd, &src_nodeID, seg_p);
 
 		if( !lost ){
 			switch(seg_p->header.type) {

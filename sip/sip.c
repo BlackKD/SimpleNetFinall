@@ -49,7 +49,6 @@ pthread_mutex_t* routingtable_mutex;	//路由表互斥量
 //SIP进程使用这个函数连接到本地SON进程的端口SON_PORT
 //成功时返回连接描述符, 否则返回-1
 int connectToSON() {
-
     struct sockaddr_in servaddr;
     int sockfd = socket(AF_INET, SOCK_STREAM, 0); //AF_INET for ipv4; SOCK_STREAM for byte stream
     if(sockfd < 0) {
@@ -153,6 +152,7 @@ void updatatable(sip_pkt_t *pkt)
 	pthread_mutex_unlock(dv_mutex);
 }
 
+// receive the packets from SON
 void* pkthandler(void* arg) {
 	//你需要编写这里的代码.
 	sip_pkt_t *pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
@@ -161,18 +161,94 @@ void* pkthandler(void* arg) {
 		printf("Routing: received a packet from neighbor %d\n",pkt->header.src_nodeID);
 		switch(pkt->header.type)
 		{
-			case ROUTE_UPDATE:updatatable(pkt);break;
-			case SIP:break;//heiheihei 注意对SIP报转发时要从路由表中查下一跳IP，并且对获得目的地不是自己的包要进行转发（同上）
+			case ROUTE_UPDATE:updatatable(pkt); break;
+
+			case SIP: {
+				// destination is itself and then send it to STCP
+				if (pkt->header.dest_nodeID == topology_getMyNodeID()) {
+					sendseg_arg_t *sseg = (sendseg_arg_t*)(pkt->data);
+					if (forwardsegToSTCP(stcp_conn, pkt->header.src_nodeID,  &(sseg->seg)) < 0) {
+						printf("pkhandler: forwardsegTpSTCP error!\n");
+					}
+				}
+				else { // send to next node
+					int nextNodeID = routingtable_getnextnode(routingtable, pkt->header.dest_nodeID);
+					if (son_sendpkt(nextNodeID, pkt, son_conn) < 0) {
+						printf("pkhandler: son_dendpkt error!\n");
+					}
+				}
+				break;//heiheihei 注意对SIP报转发时要从路由表中查下一跳IP，并且对获得目的地不是自己的包要进行转发（同上）
+			}
 		}
 	}
   return 0;
 }
 
+/*
+ * receive the segments from STCP with getSegToSend function,
+ * and send it with son_sendpkt function
+ */
+void* seghandler(void *arg) {
+	sendpkt_arg_t spkt;
+	sip_pkt_t *pktPtr      = &(spkt.pkt);
+
+	// the received content will be put into the data field of spkt.pkt 
+	sendseg_arg_t *ssegPtr = (sendseg_arg_t*)(pktPtr->data);
+	int *destNodeIdPtr     = &(ssegPtr->nodeID);
+	seg_t *segPtr          = &(ssegPtr->seg);
+
+	while (1) {
+		// receive segs from local STCP
+		if (getsegToSend(stcp_conn, destNodeIdPtr, segPtr) > 0) {
+			// sip nextNodeID
+			int nextNodeID  = routingtable_getnextnode(routingtable, *destNodeIdPtr);
+			spkt.nextNodeID = nextNodeID;
+			// fill the sip header
+			sip_hdr_t *siphdr   = &(pktPtr->header);
+			siphdr->src_nodeID  = topology_getMyNodeID();
+			siphdr->dest_nodeID = *destNodeIdPtr;
+			siphdr->length      = sizeof(sendseg_arg_t);
+			siphdr->type        = SIP;
+			// send it
+			if (son_sendpkt(nextNodeID, pktPtr, son_conn) < 0)
+				return NULL;
+		}
+		else 
+			return NULL;
+	}
+}
+
+// 等待来自本地STCP的连接
+// 当本地STCP断开后，等待下一次的STCP连接
+void waitSTCP() {
+	socklen_t clilen;
+    int listenfd;
+    struct sockaddr_in cliaddr,servaddr;
+    listenfd = socket(AF_INET,SOCK_STREAM,0);
+    memset(&servaddr, 0, sizeof(struct sockaddr_in));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(SIP_PORT);
+    bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+    listen(listenfd, MAX_NODE_NUM);//开始监听
+    clilen = sizeof(cliaddr);
+    
+    pthread_t tid;
+    while(1) {
+    	stcp_conn = accept(listenfd, (struct sockaddr *)&cliaddr, &clilen);
+    	printf("Linked to STCP\n");
+		pthread_create(&tid, NULL, seghandler, NULL);
+		// wait for seghandler's return and then wait for next connection
+		pthread_join(tid, NULL);	
+    }
+    
+}
 
 //这个函数终止SIP进程, 当SIP进程收到信号SIGINT时会调用这个函数. 
 //它关闭所有连接, 释放所有动态分配的内存.
 void sip_stop() {
     close(son_conn);
+    close(stcp_conn);
 	//你需要编写这里的代码.
   return;
 }
@@ -204,7 +280,7 @@ int main(int argc, char *argv[]) {
 		printf("can't connect to SON process\n");
 		exit(1);		
 	}
-	
+
 	//启动线程处理来自SON进程的进入报文 
 	pthread_t pkt_handler_thread; 
 	pthread_create(&pkt_handler_thread,NULL,pkthandler,(void*)0);

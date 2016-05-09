@@ -14,7 +14,7 @@
  
  /*
   * On error, 0 is returned
-  * On success, the value of the ip address is returned(little endian)
+  * On success, the value of the ip address is returned(big endian)
   */
 unsigned long get_local_ip()
 {
@@ -74,15 +74,15 @@ unsigned long get_local_ip()
 					return 0;
                 }
                 
-                unsigned char ip0, ip1, ip2, ip3; // must be this order, for the position in the stack
+                unsigned ip0, ip1, ip2, ip3; // must be this order, for the position in the stack
                 sscanf(host, "%u\.%u\.%u\.%u", &ip3, &ip2, &ip1, &ip0);
                 printf("Host's address: %u.%u.%u.%u", ip3, ip2, ip1, ip0); // 1 byte <- 4 bytes, will cover
 
                 char *ip_val_ptr = (char *)(&ip_value);
-                ip_val_ptr[3] = ip0; 
-                ip_val_ptr[2] = ip1;
-                ip_val_ptr[1] = ip2;
-                ip_val_ptr[0] = ip3;
+                ip_val_ptr[3] = (char)ip0; 
+                ip_val_ptr[2] = (char)ip1;
+                ip_val_ptr[1] = (char)ip2;
+                ip_val_ptr[0] = (char)ip3;
             }
             printf("\n");
         }

@@ -72,7 +72,7 @@
 
 //这是广播节点ID. 
 #define BROADCAST_NODEID 9999
-
+#define init_ip 0x00bed472;
 //路由更新广播间隔, 以秒为单位
 #define ROUTEUPDATE_INTERVAL 5
 #endif

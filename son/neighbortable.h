@@ -7,7 +7,13 @@
 #ifndef NEIGHBORTABLE_H 
 #define NEIGHBORTABLE_H
 #include <arpa/inet.h>
-
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "../common/constants.h"
 //邻居表条目定义
 //一张邻居表包含n个条目, 其中n是邻居的数量
 //每个节点都运行一个简单重叠网络进程SON, 每个SON进程为运行该进程的节点维护一张邻居表.
@@ -17,6 +23,7 @@ typedef struct neighborentry {
   in_addr_t nodeIP;     //邻居的IP地址
   int conn;	            //针对这个邻居的TCP连接套接字描述符
 } nbr_entry_t;
+#define MAX_NEI 3
 
 //这个函数首先动态创建一个邻居表. 然后解析文件topology/topology.dat, 填充所有条目中的nodeID和nodeIP字段, 将conn字段初始化为-1.
 //返回创建的邻居表.

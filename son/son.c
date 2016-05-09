@@ -160,36 +160,8 @@ int connectNbrs() {
 //每个listen_to_neighbor线程持续接收来自一个邻居的报文. 它将接收到的报文转发给SIP进程.
 //所有的listen_to_neighbor线程都是在到邻居的TCP连接全部建立之后启动的.
 void* listen_to_neighbor(void* arg) {
-	//你需要编写这里的代码.
-    //int sockfd = 0;
-    //struct fd_set set;
     while(1)
     {
-  /*      FD_ZERO(&set);//将你的套节字集合清空
-        int i =0;
-        for(i = 0 ; i <topology_getNbrNum();i++)
-        {
-            if(nt[i].conn!= -1)
-                  FD_SET(nt[i].conn, &set);//加入你感兴趣的套节字到集合,这里是一个读数据的套节字s
-        }
-        select(0,&set,NULL,NULL,NULL);//检查套节字是否可读,
-        //很多情况下就是是否有数据(注意,只是说很多情况)
-        //这里select是否出错没有写
-        for(i = 0;i<topology_getNbrNum();i++)
-        {
-        if(FD_ISSET(nt[i].conn, &set) //检查s是否在这个集合里面,
-        { //select将更新这个集合,把其中不可读的套节字去掉
-            //只保留符合条件的套节字在这个集合里面
-            //char *buffer = (char *)malloc(2000);
-            //memset(buffer,0,2000);
-            sip_pkt_t* pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
-            memset(pkt,0,sizeof(sip_pkt_t));
-            recv(nt[i].conn, pkt, sizeof(sip_pkt_t), 0);
-            forwardpktToSIP(pkt,sip_conn);
-            printf("send packet to IP\n");
-        }
-        }
-   */
         sip_pkt_t* pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
         memset(pkt,0,sizeof(sip_pkt_t));
         recvpkt(pkt, nt[*((int *)arg)].conn);

@@ -30,19 +30,33 @@
 #define SERVERPORT2 90
 //在接收到字符串后, 等待15秒, 然后关闭连接.
 #define WAITTIME 15
-
+#define LISTENQ 8
 //这个函数连接到本地SIP进程的端口SIP_PORT. 如果TCP连接失败, 返回-1. 连接成功, 返回TCP套接字描述符, STCP将使用该描述符发送段.
 int connectToSIP() {
 
 	//你需要编写这里的代码.
-	
+    socklen_t clilen;
+    int listenfd;
+    //char buf[MAXLINE];
+    struct sockaddr_in cliaddr,servaddr;
+    listenfd = socket(AF_INET,SOCK_STREAM,0);
+    memset(&servaddr, 0, sizeof(struct sockaddr_in));
+    servaddr.sin_family=AF_INET;
+    servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
+    servaddr.sin_port=htons(SIP_PORT);
+    bind(listenfd,(struct sockaddr *)&servaddr,sizeof(servaddr));
+    listen(listenfd,LISTENQ);//开始监听
+    clilen = sizeof(cliaddr);
+    connfd = accept(listenfd,(struct sockaddr *)&cliaddr,&clilen);
+    return connfd;
 }
 
 //这个函数断开到本地SIP进程的TCP连接. 
 void disconnectToSIP(int sip_conn) {
 
-	//你需要编写这里的代码.
-	
+  //你需要编写这里的代码.
+    printf("disconnectToSIP\n");
+        close(sip_conn);
 }
 
 int main() {

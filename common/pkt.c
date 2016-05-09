@@ -194,7 +194,7 @@ int getpktToSend(sip_pkt_t* pkt, int* nextNode, int sip_conn)
 		return 1;
 	}
 	else 
-		return 0;
+		return -1;
 }
 
 // forwardpktToSIP()函数是在SON进程接收到来自重叠网络中其邻居的报文后被调用的. 
@@ -204,8 +204,8 @@ int getpktToSend(sip_pkt_t* pkt, int* nextNode, int sip_conn)
 // 如果报文发送成功, 返回1, 否则返回-1.
 int forwardpktToSIP(sip_pkt_t* pkt, int sip_conn)
 {
-    char *buffer = (char *)malloc(1504);
-    memset(buffer,0,1504);
+    char buffer[1504];
+ 
 	//char buffer[1504];
 	build_sipSendBuf(buffer, pkt);
 
@@ -219,10 +219,8 @@ int forwardpktToSIP(sip_pkt_t* pkt, int sip_conn)
 // 如果报文发送成功, 返回1, 否则返回-1.
 int sendpkt(sip_pkt_t* pkt, int conn)
 {
-    char *buffer = (char *)malloc(1504);
-    memset(buffer,0,1504);
+    char buffer[1504];
 
-	//char buffer[1504];
 	build_sipSendBuf(buffer, pkt);
     sip_pkt_t * p = (sip_pkt_t *)(buffer+2);
     printf("rec myid %d  in buffer\n",p->header.src_nodeID);

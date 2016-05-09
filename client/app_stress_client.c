@@ -44,7 +44,7 @@ int connectToSIP() {
 	}
 	memset(&servaddr, 0, sizeof(struct sockaddr_in));
 	servaddr.sin_family = AF_INET;
-	//servaddr.sin_addr.s_addr = inet_addr(SERV_ADDR);
+	servaddr.sin_addr.s_addr = get_local_ip();
 	servaddr.sin_port = htons(SIP_PORT);
 	//connect to the server
 	if(connect(sockfd, (struct sockaddr* )&servaddr, sizeof(servaddr)) < 0) {//创建套接字连接服务器
@@ -59,7 +59,7 @@ int connectToSIP() {
 
 //这个函数断开到本地SIP进程的TCP连接. 
 void disconnectToSIP(int sip_conn) {
-	close(son_conn);
+	close(sip_conn);
 	printf("disconnectToSIP successfully\n");
 }
 

@@ -34,7 +34,7 @@ int sip_conn;
 // 服务器只有一个seghandler.
 void stcp_server_init(int conn) 
 {
-	    int i = 0;
+	int i = 0;
     for(i = 0; i < 10 ; i++)
     {
         TCBtable[i]=NULL;
@@ -52,7 +52,31 @@ void stcp_server_init(int conn)
 // 如果TCB表中没有条目可用, 这个函数返回-1.
 int stcp_server_sock(unsigned int server_port) 
 {
-	return 0;
+    printf("start stcp_server_sock! \n");
+    int i = 0;
+    for(i = 0;i < MAX_TRANSPORT_CONNECTIONS;i++)
+    {
+        if(TCBtable[i] == NULL)
+        {
+            break;
+        }
+    }
+    if(i < MAX_TRANSPORT_CONNECTIONS)
+    {
+        TCBtable[i] = (server_tcb_t *)malloc(sizeof(server_tcb_t));
+        memset(TCBtable[i],0,sizeof(server_tcb_t));
+        TCBtable[i]->state = CLOSED;
+        TCBtable[i]->server_portNum = server_port;
+        TCBtable[i]->bufMutex = &gl_mutex[i];
+		TCBtable[i]->expect_seqNum = 0;
+		TCBtable[i]->usedBufLen = 0;
+		TCBtable[i]->recvBuf = (char *)malloc(RECEIVE_BUF_SIZE);
+		memset(TCBtable[i]->recvBuf,0,RECEIVE_BUF_SIZE);
+        return i;
+    }else
+    {
+        return -1;
+    }
 }
 
 // 这个函数使用sockfd获得TCB指针, 并将连接的state转换为LISTENING. 它然后启动定时器进入忙等待直到TCB状态转换为CONNECTED 
@@ -60,6 +84,24 @@ int stcp_server_sock(unsigned int server_port)
 // 当发生了转换时, 该函数返回1. 你可以使用不同的方法来实现这种阻塞等待.
 int stcp_server_accept(int sockfd) 
 {
+    printf("stcp_server_accept doing\n");
+    TCBtable[sockfd]->state = CLOSED;
+    pthread_mutex_init(TCBtable[sockfd]->bufMutex,NULL);
+    while(1)
+    {
+        pthread_mutex_lock(TCBtable[sockfd]->bufMutex);
+        if(TCBtable[sockfd]->state == CONNECTED)
+        {
+            pthread_mutex_unlock(TCBtable[sockfd]->bufMutex);
+
+            printf("accepted %d\n",sockfd);
+            return 1;
+        }
+        pthread_mutex_unlock(TCBtable[sockfd]->bufMutex);
+	//printf("socket :%d\n",sockfd);
+	//sleep(1);
+        
+    }
 	return 0;
 }
 
@@ -67,14 +109,90 @@ int stcp_server_accept(int sockfd)
 // 就查询接收缓冲区, 直到等待的数据到达, 它然后存储数据并返回1. 如果这个函数失败, 则返回-1.
 int stcp_server_recv(int sockfd, void* buf, unsigned int length) 
 {
-	return 0;
+	int i = sockfd;
+	void * mybuf = buf;
+	while(1)
+	{
+	//printf("recv i:%d\n",i);
+	if(TCBtable[i]!=NULL)
+	{
+	//printf("BUFlen: %d, length:%d\n",TCBtable[i]->usedBufLen,length);
+	pthread_mutex_lock(TCBtable[i]->bufMutex);
+	//printf("BUFlen: %d, length:%d\n",TCBtable[i]->usedBufLen,length);
+	if(TCBtable[i]->usedBufLen >= length)
+	{
+		//printf("%s\n",TCBtable[i]->recvBuf+length);
+		memcpy(mybuf,TCBtable[i]->recvBuf,length);
+		//printf("%s\n",buf);
+		TCBtable[i]->usedBufLen = TCBtable[i]->usedBufLen - length;
+		char * temp = (char *)malloc(RECEIVE_BUF_SIZE);
+		memset(temp,0,RECEIVE_BUF_SIZE);
+		memcpy(temp,TCBtable[i]->recvBuf+length,TCBtable[i]->usedBufLen);
+		//printf("%s\n",temp);
+		//memset(TCBtable[i]->recvBuf,0,RECEIVE_BUF_SIZE);
+		//free(TCBtable[i]->recvBuf);
+		TCBtable[i]->recvBuf = (char *)malloc(RECEIVE_BUF_SIZE);
+		memset(TCBtable[i]->recvBuf,0,RECEIVE_BUF_SIZE);
+		memcpy(TCBtable[i]->recvBuf,temp,TCBtable[i]->usedBufLen);
+		pthread_mutex_unlock(TCBtable[i]->bufMutex);
+		free(temp);
+		return 1;
+	}
+	else if(TCBtable[i]->usedBufLen!= 0)
+	{
+		memcpy(mybuf,TCBtable[i]->recvBuf,TCBtable[i]->usedBufLen);
+		mybuf = mybuf + TCBtable[i]->usedBufLen;
+		length = length - TCBtable[i]->usedBufLen;
+		TCBtable[i]->usedBufLen = 0;
+		TCBtable[i]->recvBuf = (char *)malloc(RECEIVE_BUF_SIZE);
+		memset(TCBtable[i]->recvBuf,0,RECEIVE_BUF_SIZE);
+		if(length == 0)
+		{
+			pthread_mutex_unlock(TCBtable[i]->bufMutex);
+			return 1;
+		}
+		else if(length < 0)
+		{
+			printf("too short need!n\n");
+			exit(1);
+		}
+		
+	}
+	pthread_mutex_unlock(TCBtable[i]->bufMutex);
+	}
+	else
+	{
+		printf("mysocket has stopped!\n %d",i);
+		
+		return -1;
+	}
+	//pthread_mutex_unlock(TCBtable[i]->bufMutex);
+	usleep(ACCEPT_POLLING_INTERVAL/1000);
+	}
+  return 0;
 }
 
 // 这个函数调用free()释放TCB条目. 它将该条目标记为NULL, 成功时(即位于正确的状态)返回1,
 // 失败时(即位于错误的状态)返回-1.
 int stcp_server_close(int sockfd) 
 {
-	return 0;
+    printf("closing now socket %d\n",sockfd);
+    while(1)
+	{
+    pthread_mutex_lock(TCBtable[sockfd]->bufMutex);
+    if(TCBtable[sockfd]->state == CLOSEWAIT)
+    {
+        sleep(CLOSEWAIT_TIMEOUT);
+        pthread_mutex_unlock(TCBtable[sockfd]->bufMutex);
+
+        free(TCBtable[sockfd]);
+        TCBtable[sockfd] = NULL;
+        printf("closed %d\n",sockfd);
+                return 1;
+    }
+    pthread_mutex_unlock(TCBtable[sockfd]->bufMutex);
+	}
+	return -1;
 }
 
 // 这是由stcp_server_init()启动的线程. 它处理所有来自客户端的进入数据. seghandler被设计为一个调用sip_recvseg()的无穷循环, 
@@ -86,7 +204,8 @@ void* seghandler(void* arg)
     {
         seg_t * mytcpMessage = (seg_t*)malloc(sizeof(seg_t));
         memset(mytcpMessage,0,sizeof(seg_t));
-        int j = sip_recvseg(connfd, mytcpMessage);
+        int src_nodeId;
+        int j = sip_recvseg(connfd, &src_nodeId, mytcpMessage);
 
         if(j == 0)
         {
@@ -113,7 +232,7 @@ void* seghandler(void* arg)
 				printf("received a SYN package\n");
                                 
                                 TCBtable[i]->client_portNum = mytcpMessage->header.src_port;
-                                
+                                TCBtable[i]->client_nodeID  = src_nodeId;
                                 TCBtable[i]->state = CONNECTED;
                                 //TCBtable[i]->expect_seqNum = mytcpMessage->header.seq_num + 1;
                                 TCBtable[i]->recvBuf = mytcpMessage -> data;
@@ -126,7 +245,7 @@ void* seghandler(void* arg)
                                 retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
                                 retcpMessage->header.ack_num = mytcpMessage->header.seq_num+1;
                                 retcpMessage->header.type = SYNACK;
-                                sip_sendseg(connfd, retcpMessage);
+                                sip_sendseg(connfd, TCBtable[i]->client_nodeID, retcpMessage);
                        //         while(1)
                          //       {
                            //     sip_sendseg(*(int *)arg, retcpMessage);
@@ -162,7 +281,7 @@ void* seghandler(void* arg)
                                 retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
                                 retcpMessage->header.ack_num = mytcpMessage->header.seq_num+1;
                                 retcpMessage->header.type = FINACK;
-                                sip_sendseg(connfd, retcpMessage);
+                                sip_sendseg(connfd, TCBtable[i]->client_nodeID, retcpMessage);
                                // sip_sendseg(*(int *)arg, retcpMessage);
                                 printf("send ackfin %d",i);
                              //   while(1)
@@ -207,7 +326,7 @@ void* seghandler(void* arg)
 										retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
 										retcpMessage->header.ack_num = TCBtable[i]->expect_seqNum;
 										retcpMessage->header.type = DATAACK;
-										sip_sendseg(connfd, retcpMessage);
+										sip_sendseg(connfd, TCBtable[i]->client_nodeID, retcpMessage);
 										printf("send next Dataack %d %d %d",i,TCBtable[i]->expect_seqNum,TCBtable[i]->usedBufLen);
 									}
 									else
@@ -223,7 +342,7 @@ void* seghandler(void* arg)
 										retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
 										retcpMessage->header.ack_num = TCBtable[i]->expect_seqNum;
 										retcpMessage->header.type = DATAACK;
-										sip_sendseg(connfd, retcpMessage);
+										sip_sendseg(connfd, TCBtable[i]->client_nodeID, retcpMessage);
 										printf("send next Dataack %d %d %d",i,TCBtable[i]->expect_seqNum,TCBtable[i]->usedBufLen);
 									}
 									pthread_mutex_unlock(TCBtable[i]->bufMutex);
@@ -237,7 +356,7 @@ void* seghandler(void* arg)
                                 retcpMessage->header.dest_port = TCBtable[i]->client_portNum;
                                 retcpMessage->header.ack_num = TCBtable[i]->expect_seqNum;
                                 retcpMessage->header.type = DATAACK;
-                                sip_sendseg(connfd, retcpMessage);
+                                sip_sendseg(connfd, TCBtable[i]->client_nodeID, retcpMessage);
                                // sip_sendseg(*(int *)arg, retcpMessage);
                                 printf("send old Dataack %d need old packet%d\n",i,TCBtable[i]->expect_seqNum);
 								}
