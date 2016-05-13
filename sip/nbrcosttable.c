@@ -43,6 +43,7 @@ nbr_cost_entry_t* nbrcosttable_create()
 	{
 		nbr_cost_table[i].nodeID = nodelist[i];
 		nbr_cost_table[i].cost = topology_getCost(myid,nodelist[i]);
+    
 	}
 	/*int i = 0;
     do

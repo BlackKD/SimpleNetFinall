@@ -20,9 +20,9 @@
 //数据包丢失率为10%
 #define PKT_LOSS_RATE 0.1
 //SYN_TIMEOUT值, 单位为纳秒
-#define SYN_TIMEOUT 500000000
+#define SYN_TIMEOUT 500000
 //FIN_TIMEOUT值, 单位为纳秒
-#define FIN_TIMEOUT 500000000
+#define FIN_TIMEOUT 500000
 //stcp_client_connect()中的最大SYN重传次数
 #define SYN_MAX_RETRY 5
 //stcp_client_disconnect()中的最大FIN重传次数
@@ -30,11 +30,11 @@
 //服务器CLOSEWAIT超时值, 单位为秒
 #define CLOSEWAIT_TIMEOUT 5
 //sendBuf_timer线程的轮询间隔, 单位为纳秒
-#define SENDBUF_POLLING_INTERVAL 500000000
+#define SENDBUF_POLLING_INTERVAL 500000
 //STCP客户端在stcp_server_recv()函数中使用这个时间间隔来轮询接收缓冲区, 以检查是否请求的数据已全部到达, 单位为秒.
 #define RECVBUF_POLLING_INTERVAL 1
 //stcp_server_accept()函数使用这个时间间隔来忙等待TCB状态转换, 单位为纳秒
-#define ACCEPT_POLLING_INTERVAL 500000000
+#define ACCEPT_POLLING_INTERVAL 500000
 //接收缓冲区大小
 #define RECEIVE_BUF_SIZE 1000000
 //数据段超时值, 单位为纳秒
@@ -47,10 +47,10 @@
 /*******************************************************************/
 
 //这个端口号用于重叠网络中节点之间的互联, 你应该修改它为一个随机值以避免和其他同学的设置发生冲突
-#define CONNECTION_PORT 3022
+#define CONNECTION_PORT 3122
 
 //这个端口号由SON进程打开, 并由SIP进程连接, 你应该修改它为一个随机值以避免和其他同学的设置发生冲突.
-#define SON_PORT 3522
+#define SON_PORT 3422
 
 //最大SIP报文数据长度: 1500 - sizeof(sip header)
 #define MAX_PKT_LEN 1488 
@@ -68,7 +68,7 @@
 #define INFINITE_COST 999
 
 //SIP进程打开这个端口并等待来自STCP进程的连接, 你应该修改它为一个随机值以避免和其他同学的设置发生冲突.
-#define SIP_PORT 4022
+#define SIP_PORT 4012
 
 //这是广播节点ID. 
 #define BROADCAST_NODEID 9999

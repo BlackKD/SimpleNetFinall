@@ -74,6 +74,11 @@ void routingtable_setnextnode(routingtable_t* routingtable, int destNodeID, int 
 	}else
 	{
 		routingtable_entry_t* temp = routingtable->hash[key];
+        if(temp->destNodeID == destNodeID)
+        {
+            temp->nextNodeID = nextNodeID;
+            return;
+        }
 		while(temp->next!=NULL)
 		{
 			if(temp->destNodeID == destNodeID)
@@ -103,6 +108,10 @@ int routingtable_getnextnode(routingtable_t* routingtable, int destNodeID)
 	}else
 	{
 		routingtable_entry_t* temp = routingtable->hash[key];
+        if(temp->destNodeID == destNodeID)
+        {
+            return temp->nextNodeID;
+        }
 		while(temp->next!=NULL)
 		{
 			if(temp->destNodeID == destNodeID)

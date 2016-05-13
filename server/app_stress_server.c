@@ -34,20 +34,25 @@
 //Õâ¸öº¯ÊýÁ¬½Óµ½±¾µØSIP½ø³ÌµÄ¶Ë¿ÚSIP_PORT. Èç¹ûTCPÁ¬½ÓÊ§°Ü, ·µ»Ø-1. Á¬½Ó³É¹¦, ·µ»ØTCPÌ×½Ó×ÖÃèÊö·û, STCP½«Ê¹ÓÃ¸ÃÃèÊö·û·¢ËÍ¶Î.
 int connectToSIP() {
 
-      socklen_t clilen;
-    int listenfd;
-    //char buf[MAXLINE];
-    struct sockaddr_in cliaddr,servaddr;
-    listenfd = socket(AF_INET,SOCK_STREAM,0);
+    struct sockaddr_in servaddr;
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0); //AF_INET for ipv4; SOCK_STREAM for byte stream
+    if(sockfd < 0) {
+        printf("Socket error!\n");
+        return 0;
+    }
     memset(&servaddr, 0, sizeof(struct sockaddr_in));
-    servaddr.sin_family=AF_INET;
-    servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
-    servaddr.sin_port=htons(SIP_PORT);
-    bind(listenfd,(struct sockaddr *)&servaddr,sizeof(servaddr));
-    listen(listenfd,LISTENQ);//¿ªÊ¼¼àÌý
-    clilen = sizeof(cliaddr);
-    connfd = accept(listenfd,(struct sockaddr *)&cliaddr,&clilen);
-    return connfd;
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = get_local_ip();
+    servaddr.sin_port = htons(SIP_PORT);
+    //connect to the server
+    if(connect(sockfd, (struct sockaddr* )&servaddr, sizeof(servaddr)) < 0) {//创建套接字连接服务器
+        printf("Link Wrong!\n");
+        exit(1);
+    }
+    else
+        printf("Link Success!\n");
+    connfd = sockfd;
+    return sockfd;
 }
 
 //Õâ¸öº¯Êý¶Ï¿ªµ½±¾µØSIP½ø³ÌµÄTCPÁ¬½Ó. 

@@ -263,7 +263,7 @@ int topology_getNodeNum()
 int* topology_getNodeArray()
 {
 	int nodesNum = 0;
-	int *p = read_Nbr(&nodesNum);
+	int *p = read_Nodes(&nodesNum);
 	if (p != NULL) {
 		return p;
 	}
@@ -287,14 +287,19 @@ unsigned int topology_getCost(int fromNodeID, int toNodeID)
 		int left_nodeId = topology_getNodeIDfromname(left_node);
 		int right_nodeId = topology_getNodeIDfromname(right_node);
 
-		// check 
-		if (left_nodeId == fromNodeID && right_nodeId == toNodeID) {
+		// check
+        if (left_nodeId == fromNodeID && right_nodeId == toNodeID) {
 			ret_cost = cost; 
 			break;
 		}
+        else if (left_nodeId == toNodeID && right_nodeId == fromNodeID) {
+            ret_cost = cost;
+            break;
+        }
 		fscanf(f, "%s%s%d", left_node, right_node, &cost); // next entry or EOF
 	}
 	
 	fclose(f);
   	return ret_cost;
+    
 }

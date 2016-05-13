@@ -83,7 +83,7 @@ void* routeupdate_daemon(void* arg) {
 	sip_pkt_t* pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
     memset(pkt,0,sizeof(sip_pkt_t));
     pkt->header.src_nodeID = topology_getMyNodeID();
-    printf("send neb my iD : %d\n",pkt->header.src_nodeID);
+    //printf("send neb my iD : %d\n",pkt->header.src_nodeID);
     pkt->header.dest_nodeID = BROADCAST_NODEID;
     pkt->header.length = sizeof(pkt_routeupdate_t);
     pkt->header.type = ROUTE_UPDATE;
@@ -99,9 +99,16 @@ void* routeupdate_daemon(void* arg) {
 		//memcpy(pkuppt->entry[i],dv[0].dvEntry[i],sizeof(dv_entry_t));
 	}
 		memcpy(pkt->data,pkuppt,sizeof(pkt_routeupdate_t));
+        
+        if(son_sendpkt(BROADCAST_NODEID, pkt, son_conn)==-1)
+        {
+            printf("SON SLEEP!!!!!!!!!!\n");
+            break;
+        }
         pthread_mutex_unlock(dv_mutex);
         sleep(ROUTEUPDATE_INTERVAL);
-        son_sendpkt(BROADCAST_NODEID, pkt, son_conn);
+
+
     }
   return 0;
 
@@ -120,9 +127,9 @@ void updatatable(sip_pkt_t *pkt)
 		if(dv[i].nodeID == pkt->header.src_nodeID)
 		{
 			int j = 0;
-			for(j = 0 ; i < topology_getNodeNum(); i++)
+			for(j = 0 ; j < topology_getNodeNum(); j++)
 			{
-				dv[i].dvEntry[j].cost = ((pkt_routeupdate_t *)(pkt->data))->entry[i].cost;
+				dv[i].dvEntry[j].cost = ((pkt_routeupdate_t *)(pkt->data))->entry[j].cost;
 			}
 		}
 	}
@@ -150,6 +157,98 @@ void updatatable(sip_pkt_t *pkt)
     }
 	//需要在此处刷新向量和路由
 	pthread_mutex_unlock(dv_mutex);
+    //nbrcosttable_print(nct);
+    dvtable_print(dv);
+    routingtable_print(routingtable);
+    //nbrcosttable_print(nbr_cost_entry_t* nct)
+}
+
+void sleeptable(int ID)
+{
+    pthread_mutex_lock(dv_mutex);
+    int i = 0;
+    for(i = 0 ; i < topology_getNbrNum()+1;i++)
+    {
+        int j = 0;
+        for(j = 0 ; j < topology_getNodeNum();j++ )
+        {
+            if(i==0)
+            {
+                if(dv[i].dvEntry[j].nodeID == ID)
+                //printf("!!!!!!!!!!!!%d!!!!!!!!!\n",dv[i].dvEntry[j].nodeID);
+                {
+                    dv[i].dvEntry[j].cost = INFINITE_COST;
+                }
+                else
+                {
+                    dv[i].dvEntry[j].cost = topology_getCost(dv[i].nodeID,dv[i].dvEntry[j].nodeID);
+                }
+            }
+            else
+            {
+                dv[i].dvEntry[j].cost = INFINITE_COST;
+            }
+        }
+    }
+    pthread_mutex_lock(routingtable_mutex);
+    free(routingtable);
+    routingtable = routingtable_create();
+    pthread_mutex_unlock(routingtable_mutex);
+   // dvtable_print(dv);
+    for(i = 0 ; i < topology_getNodeNum();i++)
+    {
+        if(dv[0].dvEntry[i].nodeID == dv[0].nodeID) continue;
+        int destnode = dv[0].dvEntry[i].nodeID;
+        int j = 0;
+        for(j = 0;j <topology_getNbrNum()+1;j++)
+        {
+            if(dv[j].nodeID!=dv[0].nodeID&&dv[j].nodeID!=destnode)
+            {
+                if(dvtable_getcost(dv,dv[0].nodeID,dv[j].nodeID)+dvtable_getcost(dv,dv[j].nodeID,destnode) < dv[0].dvEntry[i].cost)
+                {
+                    //dv[0].dvEntry[i].cost = topology_getCost(dv[0].nodeID,dv[j].nodeID)+dv[j].dvEntry[i].cost;
+                    dvtable_setcost(dv,dv[0].nodeID,destnode,dvtable_getcost(dv,dv[0].nodeID,dv[j].nodeID)+dvtable_getcost(dv,dv[j].nodeID,destnode));
+                    pthread_mutex_lock(routingtable_mutex);
+                    routingtable_setnextnode(routingtable,destnode,dv[j].nodeID);
+                    pthread_mutex_unlock(routingtable_mutex);
+                }
+            }
+        }
+    }
+
+    
+    sip_pkt_t* pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
+    memset(pkt,0,sizeof(sip_pkt_t));
+    pkt->header.src_nodeID = topology_getMyNodeID();
+    //printf("send neb my iD : %d\n",pkt->header.src_nodeID);
+    pkt->header.dest_nodeID = BROADCAST_NODEID;
+    pkt->header.length = sizeof(pkt_routeupdate_t);
+    pkt->header.type = ROUTE_UPDATE;
+    //dv_entry_t * senddv = dv[0]->dvEntry;
+    pkt_routeupdate_t* pkuppt = (pkt_routeupdate_t*)malloc(sizeof(pkt_routeupdate_t));
+    memset(pkuppt,0,sizeof(pkt_routeupdate_t));
+    pkuppt->entryNum = topology_getNodeNum();
+    //int i = 0;
+    for(i = 0 ; i < topology_getNodeNum(); i++)
+    {
+        pkuppt->entry[i].nodeID = dv[0].dvEntry[i].nodeID;
+        pkuppt->entry[i].cost = dv[0].dvEntry[i].cost;
+        //memcpy(pkuppt->entry[i],dv[0].dvEntry[i],sizeof(dv_entry_t));
+    }
+    memcpy(pkt->data,pkuppt,sizeof(pkt_routeupdate_t));
+    if(son_sendpkt(BROADCAST_NODEID, pkt, son_conn)==-1)
+    {
+        printf("SON SLEEP!!!!!!!!!!\n");
+    }
+    //sip_pkt_t *pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
+    //for(k = 0 ; k < 10;k++)
+     //   son_recvpkt(pkt,son_conn);
+    
+    
+    pthread_mutex_unlock(dv_mutex);
+    dvtable_print(dv);
+    routingtable_print(routingtable);
+
 }
 
 // receive the packets from SON
@@ -158,13 +257,14 @@ void* pkthandler(void* arg) {
 	sip_pkt_t *pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
 
 	while(son_recvpkt(pkt,son_conn)>0) {
-		printf("Routing: received a packet from neighbor %d\n",pkt->header.src_nodeID);
+		//printf("Routing: received a packet from neighbor %d\n",pkt->header.src_nodeID);
 		switch(pkt->header.type)
 		{
 			case ROUTE_UPDATE:updatatable(pkt); break;
-
+            case SLEEP:sleeptable(pkt->header.dest_nodeID);break;
 			case SIP: {
 				// destination is itself and then send it to STCP
+                printf("Routing: received a SIP packet from neighbor %d\n",pkt->header.src_nodeID);
 				if (pkt->header.dest_nodeID == topology_getMyNodeID()) {
 					sendseg_arg_t *sseg = (sendseg_arg_t*)(pkt->data);
 					if (forwardsegToSTCP(stcp_conn, pkt->header.src_nodeID,  &(sseg->seg)) < 0) {
@@ -181,6 +281,7 @@ void* pkthandler(void* arg) {
 			}
 		}
 	}
+    printf("SON SLEEP!!!!!!!!!!\n");
   return 0;
 }
 
@@ -210,6 +311,8 @@ void* seghandler(void *arg) {
 			siphdr->length      = sizeof(sendseg_arg_t);
 			siphdr->type        = SIP;
 			// send it
+            printf("segPtr-port = %d,pktPtr-port %d\n",segPtr->header.src_port,((sendseg_arg_t *)(pktPtr->data))->seg.header.src_port);
+            printf("get seg from stp begin to send %d\n",nextNodeID);
 			if (son_sendpkt(nextNodeID, pktPtr, son_conn) < 0)
 				return NULL;
 		}

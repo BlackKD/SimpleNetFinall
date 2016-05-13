@@ -39,7 +39,7 @@ static inline int Recv(int conn, char *buf, size_t size) {
 	if (recv(conn, buf, size, 0) <= 0)
     {
         printf("recv error! errno: %d\n", errno);
-        exit(0);
+     //   exit(0);
         return -1;
     }
     else
@@ -127,6 +127,7 @@ static inline void  nodeSegToBuf(char *buffer, int nodeID, seg_t* segPtr) {
 //如果sendseg_arg_t发送成功,就返回1,否则返回-1.
 int sip_sendseg(int sip_conn, int dest_nodeID, seg_t* segPtr)
 {
+    printf("IN sip_sendsg\n");
 	segPtr->header.checksum = 0;
 	segPtr->header.checksum = checksum(segPtr);
 
@@ -134,7 +135,8 @@ int sip_sendseg(int sip_conn, int dest_nodeID, seg_t* segPtr)
 	nodeSegToBuf(buffer, dest_nodeID, segPtr);
 	
 	// send it
-	int ret = Send(sip_conn, buffer, sizeof(buffer));
+    
+	int ret = Send(sip_conn, buffer, sizeof(sendseg_arg_t) + 4);
 	
 	free(buffer);
 	return ret;	
@@ -146,6 +148,7 @@ int sip_sendseg(int sip_conn, int dest_nodeID, seg_t* segPtr)
 //如果成功接收到sendseg_arg_t就返回0, 丢包则返回1, 否则返回-1.
 int sip_recvseg(int sip_conn, int* src_nodeID, seg_t* segPtr)
 {
+    printf("IN sip_recvsg\n");
 	char *buffer = (char *)malloc(sizeof(sendseg_arg_t));
 	int ret = -1;
 	
@@ -153,14 +156,20 @@ int sip_recvseg(int sip_conn, int* src_nodeID, seg_t* segPtr)
 		sendseg_arg_t *p = (sendseg_arg_t *)buffer;
 		*src_nodeID = p->nodeID;
 		memcpy(segPtr, &(p->seg), sizeof(seg_t));
-        
+        printf("rec seg %d\n",segPtr->header.src_port);
+       /* int i = 0 ;
+        for(i = 0 ;i < sizeof(seg_t);i++)
+        {
+            printf("%d ",(char *)(segPtr+i))
+        }
+        printf("\n");*/
 		ret = 0;
 	} 
 
 	// simulating the seg-lost situation
-	if (seglost(segPtr) <= 0)
+	if (seglost(segPtr) == 1)
 		ret = 1;
-	if (checkchecksum(segPtr) <= 0)
+	if (checkchecksum(segPtr) < 0)
 		ret = 1;
 
 	free(buffer);
@@ -172,9 +181,10 @@ int sip_recvseg(int sip_conn, int* src_nodeID, seg_t* segPtr)
 //如果成功接收到sendseg_arg_t就返回1, 否则返回-1.
 int getsegToSend(int stcp_conn, int* dest_nodeID, seg_t* segPtr)
 {
+    printf("IN getsegtosend\n");
 	char *buffer = (char *)malloc(sizeof(sendseg_arg_t));
 	int ret = -1;
-	
+    printf("before rev buffer\n");
 	if (recv2buf(buffer, sizeof(sendseg_arg_t), stcp_conn) > 0) {
 		sendseg_arg_t *p = (sendseg_arg_t *)buffer;
 		*dest_nodeID = p->nodeID;
@@ -182,7 +192,7 @@ int getsegToSend(int stcp_conn, int* dest_nodeID, seg_t* segPtr)
         
 		ret = 1;
 	} 
-	
+	printf("after rev buffer\n");
 	free(buffer);
   	return ret;
 }
@@ -192,11 +202,13 @@ int getsegToSend(int stcp_conn, int* dest_nodeID, seg_t* segPtr)
 //如果sendseg_arg_t被成功发送就返回1, 否则返回-1.
 int forwardsegToSTCP(int stcp_conn, int src_nodeID, seg_t* segPtr)
 {
+    printf("IN forwardsegtostcp\n");
 	char *buffer = (char *)malloc(sizeof(sendseg_arg_t) + 4);
 	nodeSegToBuf(buffer, src_nodeID, segPtr);
+    printf("segPtr-port = %d\n buffer-sour-port%d\n",segPtr->header.src_port,((sendseg_arg_t*)(buffer+2))->seg.header.src_port);
 	
 	// send it
-	int ret = Send(stcp_conn, buffer, sizeof(buffer));
+	int ret = Send(stcp_conn, buffer, sizeof(sendseg_arg_t) + 4);
 	
 	free(buffer);
 	return ret;	
@@ -278,7 +290,7 @@ int checkchecksum(seg_t* segment)
 	
 	while (cksum>>16)
 		cksum=(cksum>>16)+(cksum & 0xffff);
-	printf("checkchecksum %u\n",~cksum);
+	printf("checkchecksum %d\n",~cksum);
   	if( (unsigned short)(~cksum) != 0 )
 	{
 		// TODO:

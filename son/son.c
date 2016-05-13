@@ -27,7 +27,7 @@
 #include "neighbortable.h"
 
 //你应该在这个时间段内启动所有重叠网络节点上的SON进程
-#define SON_START_DELAY 60
+#define SON_START_DELAY 30
 
 /**************************************************************/
 //声明全局变量
@@ -164,8 +164,21 @@ void* listen_to_neighbor(void* arg) {
     {
         sip_pkt_t* pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
         memset(pkt,0,sizeof(sip_pkt_t));
-        recvpkt(pkt, nt[*((int *)arg)].conn);
-        forwardpktToSIP(pkt,sip_conn);
+        if(recvpkt(pkt, nt[*((int *)arg)].conn) != -1)
+            forwardpktToSIP(pkt,sip_conn);
+        else
+        {
+            //sip_pkt_t* pkt = (sip_pkt_t*)malloc(sizeof(sip_pkt_t));
+            memset(pkt,0,sizeof(sip_pkt_t));
+            pkt->header.src_nodeID = topology_getMyNodeID();
+            //printf("send neb my iD : %d\n",pkt->header.src_nodeID);
+            pkt->header.dest_nodeID = nt[*((int *)arg)].nodeID;
+            pkt->header.length = 0;
+            pkt->header.type = SLEEP;
+            forwardpktToSIP(pkt,sip_conn);
+            nt[*((int *)arg)].conn = -1;
+            return 0;
+        }
         printf("send packet to IP\n");
 
     }
@@ -206,9 +219,14 @@ void waitSIP() {
                 for(i = 0 ;i <topology_getNbrNum();i++)
                 {
                     printf("send to everyone!\n");
+                    if(nt[i].conn == -1)
+                    {
+                        printf("%d sleep no more send to him\n",nt[i].nodeID);
+                        continue;
+                    }
                     if(sendpkt(pkt, nt[i].conn) == 1)
                     {
-                        printf("send to nextnode sucess!\n");
+                        printf("send to nextnode sucess! %d\n",nt[i].conn);
                     }
                     else
                     {
@@ -233,6 +251,11 @@ void waitSIP() {
                 exit(0);
                 
             }
+            if(nt[i].conn == -1)
+            {
+                printf("%d sleep no more send to him\n",nt[i].nodeID);
+                continue;
+            }
             // 如果报文发送成功, 返回1, 否则返回-1.
             if(sendpkt(pkt, nt[i].conn) == 1)
             {
@@ -243,6 +266,11 @@ void waitSIP() {
                 printf("send to nextnode fail\n");
             }
             }
+        }
+        else
+        {
+            printf("SIP stop!!!!!!!!!!!!!!!\n");
+            break;
         }
    
         

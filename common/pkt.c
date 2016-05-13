@@ -22,7 +22,7 @@ static inline int Recv(int conn, char *buf, size_t size) {
 	if (recv(conn, buf, size, 0) <= 0)
     {
         printf("recv error! errno: %d\n", errno);
-        exit(0);
+   //     exit(0);
         return -1;
     }
     else
@@ -68,7 +68,7 @@ static inline int recv2buf(char *buffer, int buf_len, int conn) {
 							break;
 
 			case PKTSTOP1:	if (c == END_CHAR1) {
-								printf("Received a packet successfully. \n");
+				//				printf("Received a packet successfully. \n");
 								return 1;
 							}
 							else if(bytes_in_buf < buf_len - 1) { // END_CHAR0 appeared in the data
@@ -146,8 +146,8 @@ int son_sendpkt(int nextNodeID, sip_pkt_t* pkt, int son_conn)
 	char buffer[1508];
 	build_sonSendBuf(buffer, nextNodeID, pkt);
     sendpkt_arg_t *p= (sendpkt_arg_t *)(buffer + 2);
-    printf("nextNodeID: %d", p->nextNodeID);
-    printf("myId: %d, nextId: %d\n", p->pkt.header.src_nodeID, p->pkt.header.dest_nodeID);
+    //printf("nextNodeID: %d", p->nextNodeID);
+    //printf("myId: %d, nextId: %d\n", p->pkt.header.src_nodeID, p->pkt.header.dest_nodeID);
 	// send it
 	return Send(son_conn, buffer, sizeof(buffer));
 }
@@ -162,7 +162,7 @@ int son_sendpkt(int nextNodeID, sip_pkt_t* pkt, int son_conn)
 // 如果成功接收报文, 返回1, 否则返回-1.
 int son_recvpkt(sip_pkt_t* pkt, int son_conn)
 {
-	printf("In son_recvpkt ");
+	//printf("In son_recvpkt ");
 	
 	char *buf = (char *)pkt;
 	if (recv2buf(buf, sizeof(sip_pkt_t), son_conn) > 0)

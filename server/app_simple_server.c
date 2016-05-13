@@ -1,14 +1,14 @@
-//�ļ���: server/app_simple_server.c
+//Œƒº˛√˚: server/app_simple_server.c
 
-//����: ���Ǽ򵥰汾�ķ������������. �������������ӵ�����SIP����. Ȼ��������stcp_server_init()��ʼ��STCP������. 
-//��ͨ�����ε���stcp_server_sock()��stcp_server_accept()����2���׽��ֲ��ȴ����Կͻ��˵�����. ������Ȼ����������������ӵĿͻ��˷��͵Ķ��ַ���. 
-//���, ������ͨ������stcp_server_close()�ر��׽���, ���Ͽ��뱾��SIP���̵�����.
+//√Ë ˆ: ’‚ «ºÚµ•∞Ê±æµƒ∑˛ŒÒ∆˜≥Ã–Ú¥˙¬Î. ∑˛ŒÒ∆˜ ◊œ»¡¨Ω”µΩ±æµÿSIPΩ¯≥Ã. »ª∫ÛÀ¸µ˜”√stcp_server_init()≥ı ºªØSTCP∑˛ŒÒ∆˜. 
+//À¸Õ®π˝¡Ω¥Œµ˜”√stcp_server_sock()∫Õstcp_server_accept()¥¥Ω®2∏ˆÃ◊Ω”◊÷≤¢µ»¥˝¿¥◊‘øÕªß∂Àµƒ¡¨Ω”. ∑˛ŒÒ∆˜»ª∫ÛΩ” ’¿¥◊‘¡Ω∏ˆ¡¨Ω”µƒøÕªß∂À∑¢ÀÕµƒ∂Ã◊÷∑˚¥Æ. 
+//◊Ó∫Û, ∑˛ŒÒ∆˜Õ®π˝µ˜”√stcp_server_close()πÿ±’Ã◊Ω”◊÷, ≤¢∂œø™”Î±æµÿSIPΩ¯≥Ãµƒ¡¨Ω”.
 
-//��������: 2015��
+//¥¥Ω®»’∆⁄: 2015ƒÍ
 
-//����: ��
+// ‰»Î: Œﬁ
 
-//���: STCP������״̬
+// ‰≥ˆ: STCP∑˛ŒÒ∆˜◊¥Ã¨
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -23,82 +23,87 @@
 #include "../common/constants.h"
 #include "stcp_server.h"
 
-//������������, һ��ʹ�ÿͻ��˶˿ں�87�ͷ������˿ں�88. ��һ��ʹ�ÿͻ��˶˿ں�89�ͷ������˿ں�90.
+//¥¥Ω®¡Ω∏ˆ¡¨Ω”, “ª∏ˆ π”√øÕªß∂À∂Àø⁄∫≈87∫Õ∑˛ŒÒ∆˜∂Àø⁄∫≈88. ¡Ì“ª∏ˆ π”√øÕªß∂À∂Àø⁄∫≈89∫Õ∑˛ŒÒ∆˜∂Àø⁄∫≈90.
 #define CLIENTPORT1 87
 #define SERVERPORT1 88
 #define CLIENTPORT2 89
 #define SERVERPORT2 90
-//�ڽ��յ��ַ�����, �ȴ�15��, Ȼ��ر�����.
+//‘⁄Ω” ’µΩ◊÷∑˚¥Æ∫Û, µ»¥˝15√Î, »ª∫Ûπÿ±’¡¨Ω”.
 #define WAITTIME 15
 #define LISTENQ 8
-//����������ӵ�����SIP���̵Ķ˿�SIP_PORT. ���TCP����ʧ��, ����-1. ���ӳɹ�, ����TCP�׽���������, STCP��ʹ�ø����������Ͷ�.
+//’‚∏ˆ∫Ø ˝¡¨Ω”µΩ±æµÿSIPΩ¯≥Ãµƒ∂Àø⁄SIP_PORT. »Áπ˚TCP¡¨Ω” ß∞‹, ∑µªÿ-1. ¡¨Ω”≥…π¶, ∑µªÿTCPÃ◊Ω”◊÷√Ë ˆ∑˚, STCPΩ´ π”√∏√√Ë ˆ∑˚∑¢ÀÕ∂Œ.
 int connectToSIP() {
 
-	//����Ҫ��д����Ĵ���.
-    socklen_t clilen;
-    int listenfd;
-    //char buf[MAXLINE];
-    struct sockaddr_in cliaddr,servaddr;
-    listenfd = socket(AF_INET,SOCK_STREAM,0);
+	//ƒ„–Ë“™±‡–¥’‚¿Ôµƒ¥˙¬Î.
+    struct sockaddr_in servaddr;
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0); //AF_INET for ipv4; SOCK_STREAM for byte stream
+    if(sockfd < 0) {
+        printf("Socket error!\n");
+        return 0;
+    }
     memset(&servaddr, 0, sizeof(struct sockaddr_in));
-    servaddr.sin_family=AF_INET;
-    servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
-    servaddr.sin_port=htons(SIP_PORT);
-    bind(listenfd,(struct sockaddr *)&servaddr,sizeof(servaddr));
-    listen(listenfd,LISTENQ);//��ʼ����
-    clilen = sizeof(cliaddr);
-    connfd = accept(listenfd,(struct sockaddr *)&cliaddr,&clilen);
-    return connfd;
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = get_local_ip();
+    servaddr.sin_port = htons(SIP_PORT);
+    //connect to the server
+    if(connect(sockfd, (struct sockaddr* )&servaddr, sizeof(servaddr)) < 0) {//创建套接字连接服务器
+        printf("Link Wrong!\n");
+        exit(1);
+    }
+    else
+        printf("Link Success!\n");
+    connfd = sockfd;
+    return sockfd;
 }
 
-//��������Ͽ�������SIP���̵�TCP����. 
+//’‚∏ˆ∫Ø ˝∂œø™µΩ±æµÿSIPΩ¯≥ÃµƒTCP¡¨Ω”. 
 void disconnectToSIP(int sip_conn) {
 
-  //����Ҫ��д����Ĵ���.
+  //ƒ„–Ë“™±‡–¥’‚¿Ôµƒ¥˙¬Î.
     printf("disconnectToSIP\n");
         close(sip_conn);
 }
 
 int main() {
-	//���ڶ����ʵ����������
+	//”√”⁄∂™∞¸¬ µƒÀÊª˙ ˝÷÷◊”
 	srand(time(NULL));
 
-	//���ӵ�SIP���̲����TCP�׽���������
+	//¡¨Ω”µΩSIPΩ¯≥Ã≤¢ªÒµ√TCPÃ◊Ω”◊÷√Ë ˆ∑˚
 	int sip_conn = connectToSIP();
 	if(sip_conn<0) {
 		printf("can not connect to the local SIP process\n");
 	}
 
-	//��ʼ��STCP������
+	//≥ı ºªØSTCP∑˛ŒÒ∆˜
 	stcp_server_init(sip_conn);
 
-	//�ڶ˿�SERVERPORT1�ϴ���STCP�������׽��� 
+	//‘⁄∂Àø⁄SERVERPORT1…œ¥¥Ω®STCP∑˛ŒÒ∆˜Ã◊Ω”◊÷ 
 	int sockfd= stcp_server_sock(SERVERPORT1);
 	if(sockfd<0) {
 		printf("can't create stcp server\n");
 		exit(1);
 	}
-	//��������������STCP�ͻ��˵����� 
+	//º‡Ã˝≤¢Ω” ‹¿¥◊‘STCPøÕªß∂Àµƒ¡¨Ω” 
 	stcp_server_accept(sockfd);
 
-	//�ڶ˿�SERVERPORT2�ϴ�����һ��STCP�������׽���
+	//‘⁄∂Àø⁄SERVERPORT2…œ¥¥Ω®¡Ì“ª∏ˆSTCP∑˛ŒÒ∆˜Ã◊Ω”◊÷
 	int sockfd2= stcp_server_sock(SERVERPORT2);
 	if(sockfd2<0) {
 		printf("can't create stcp server\n");
 		exit(1);
 	}
-	//��������������STCP�ͻ��˵����� 
+	//º‡Ã˝≤¢Ω” ‹¿¥◊‘STCPøÕªß∂Àµƒ¡¨Ω” 
 	stcp_server_accept(sockfd2);
 
 	char buf1[6];
 	char buf2[7];
 	int i;
-	//�������Ե�һ�����ӵ��ַ���
+	//Ω” ’¿¥◊‘µ⁄“ª∏ˆ¡¨Ω”µƒ◊÷∑˚¥Æ
 	for(i=0;i<5;i++) {
 		stcp_server_recv(sockfd,buf1,6);
 		printf("recv string: %s from connection 1\n",buf1);
 	}
-	//�������Եڶ������ӵ��ַ���
+	//Ω” ’¿¥◊‘µ⁄∂˛∏ˆ¡¨Ω”µƒ◊÷∑˚¥Æ
 	for(i=0;i<5;i++) {
 		stcp_server_recv(sockfd2,buf2,7);
 		printf("recv string: %s from connection 2\n",buf2);
@@ -106,7 +111,7 @@ int main() {
 
 	sleep(WAITTIME);
 
-	//�ر�STCP������ 
+	//πÿ±’STCP∑˛ŒÒ∆˜ 
 	if(stcp_server_close(sockfd)<0) {
 		printf("can't destroy stcp server\n");
 		exit(1);
@@ -116,6 +121,6 @@ int main() {
 		exit(1);
 	}				
 
-	//�Ͽ���SIP����֮�������
+	//∂œø™”ÎSIPΩ¯≥Ã÷Æº‰µƒ¡¨Ω”
 	disconnectToSIP(sip_conn);
 }
